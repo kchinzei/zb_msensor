@@ -1,0 +1,16 @@
+[Unit]
+Description = zigbee motion sensor daemon
+After=network.target
+
+[Service]
+EnvironmentFile = ./.env
+ExecStart = /opt/zb_msensor/zb_msensor.py -u ${MQTT_USER} -p ${MQTT_PASS}
+WorkingDirectory=/opt/zb_msensor
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Type = simple
+
+[Install]
+WantedBy = multi-user.target
