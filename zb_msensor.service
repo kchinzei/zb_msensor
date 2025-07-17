@@ -3,9 +3,9 @@ Description = zigbee motion sensor daemon
 After=network.target
 
 [Service]
-EnvironmentFile = ./.env
+EnvironmentFile = /opt/zb_msensor/.env
 ExecStart = /opt/zb_msensor/zb_msensor.py -u ${MQTT_USER} -p ${MQTT_PASS}
-WorkingDirectory=/opt/zb_msensor
+WorkingDirectory = /opt/zb_msensor
 Restart=always
 RestartSec=5
 StandardOutput=journal
