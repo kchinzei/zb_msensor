@@ -27,14 +27,19 @@ import paho.mqtt.client as mqtt
 defaultHost = '192.168.0.201'
 defaultPort = 1883
 deviceState = {}
-sensorSec = 0 # When a motion sensor raises a message, uppdate it.
+refractoryPeriodSec = 0 # When a motion sensor raises a message, uppdate it.
+cancelPeriodSec = 0
 
 kSleepSec = 10
-kMSensorDict = {'topic_sub': 'zigbee2mqtt/MotionS/', 'message': 'occupancy'}
+kCancelSec = 15*60
+
 kTopicsDictList = [
-    {'topic_sub': 'zigbee2mqtt/RGBWW', 'type': 'rgbww', 'topic_pub_x': '/set', 'offmsg': '{"state":"OFF"}'},
-    {'topic_sub': 'zigbee2mqtt/WW_U', 'type': 'ww', 'topic_pub_x': '/set', 'offmsg': '{"state":"OFF"}'},
-    {'topic_sub': 'zigbee2mqtt/WW_L', 'type': 'ww', 'topic_pub_x': '/set', 'offmsg': '{"state":"OFF"}'},
+#    {'topic_sub': 'zigbee2mqtt/RGBWW', 'type': 'rgbww', 'topic_pub_x': '/set', 'offmsg': '{"state":"OFF"}',
+#     'query':'{"state":""}', 'topic_get': '/get'},
+    {'topic_sub': 'zigbee2mqtt/WW_U', 'type': 'ww', 'topic_pub_x': '/set', 'offmsg': '{"state":"OFF"}',
+     'query':'{"state":""}', 'topic_get': '/get'},
+    {'topic_sub': 'zigbee2mqtt/WW_L', 'type': 'ww', 'topic_pub_x': '/set', 'offmsg': '{"state":"OFF"}',
+     'query':'{"state":""}', 'topic_get': '/get'},
     {'topic_sub': 'wled/1cc53a', 'type': 'wled', 'topic_pub_x': '', 'offmsg': 'OFF'}
 ]
 
@@ -42,6 +47,11 @@ kSensorDictList = [
     {'topic_sub': 'zigbee2mqtt/MotionS', 'type': 'sonoff', 'key':'occupancy'},
 ]
 
+kCancelDictList = [
+    {'topic_sub': 'zigbee2mqtt/Aqara01', 'type': 'aqara', 'key':'action'},
+]
+
+    
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, reason_code, properties):
     print(f'Connected with result code {reason_code}', flush=True)
@@ -51,38 +61,76 @@ def on_connect(client, userdata, flags, reason_code, properties):
         client.subscribe(d['topic_sub']+'/#')
     for d in kSensorDictList:
         client.subscribe(d['topic_sub']+'/#')
+    for d in kCancelDictList:
+        client.subscribe(d['topic_sub']+'/#')
 
     # Populate deviceState
     for d in kTopicsDictList:
         deviceState[d['topic_sub']] = d['offmsg']
+        query = d.get('query', None)
+        if query is not None:
+            client.publish(topic=d['topic_sub'] + d['topic_get'], payload=query)
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    global deviceState, sensorSec
+    global deviceState, refractoryPeriodSec, cancelPeriodSec
     currentSec = time.time()
     # which topic we receive?
-    for sensor in kSensorDictList:
-        #print(f'{time.ctime()}: {msg.topic=}')
-        if sensor['topic_sub'] == msg.topic:
-            # Sensor issued a message.
+    if currentSec > cancelPeriodSec:
+        for sensor in kSensorDictList:
+            # print(f'{time.ctime()}: {msg.topic=}')
+            if sensor['topic_sub'] == msg.topic:
+                # Sensor issued a message.
+                payload = json.loads(msg.payload.decode(encoding='utf-8'))
+                occupancy = payload['occupancy']
+                refractoryPeriodSec = currentSec + kSleepSec
+                for d in kTopicsDictList:
+                    topic = d['topic_sub']
+                    topic_pub = topic + d['topic_pub_x']
+                    payload_pub = deviceState[topic] if occupancy else d['offmsg']
+                    if d['type'] == 'rgbww':
+                        # 250719                                                          
+                        # Miboxer FUT03xZ odd behavior
+                        # 1) When turn on in RGBW mode, it always first turns on in color_temp mode (White on)
+                        # 2) Moment after, it changes to xy mode, but in very dark brightness
+                        # As workaround, first turn on with brightness=0, then send brightness alone.
+                        # This still behaves odd as it momently turns off, but much better...
+                        # https://github.com/Koenkk/zigbee2mqtt/issues/19345
+                        # (transition has no effect for mine)
+                        data = json.loads(msg.payload.decode(encoding='utf-8'))
+                        # 1) Get the brightness value
+                        brightness = data.get('brightness', 0)
+                        # 2) Swap brightness value to 0 (redundant here, but assuming we want to set it anyway)
+                        data['brightness'] = 0
+                        # Convert back to JSON string
+                        payload1 = json.dumps(data)
+                        payload2 = f'{{"brightness":{brightness}}}'
+                        client.publish(topic=topic_pub, payload=payload1)
+                        client.publish(topic=topic_pub, payload=payload2)
+                        time.sleep(2)
+                        client.publish(topic=topic_pub, payload=payload2)
+                    else:
+                        client.publish(topic=topic_pub, payload=payload_pub)
+                    print(f'{occupancy=} {topic_pub=} {payload_pub=}', file=sys.stderr)
+    for cancel in kCancelDictList:
+        if cancel['topic_sub'] == msg.topic:
             payload = json.loads(msg.payload.decode(encoding='utf-8'))
-            occupancy = payload['occupancy']
-            sensorSec = currentSec
-            for d in kTopicsDictList:
-                topic = d['topic_sub']
-                topic_pub = topic + d['topic_pub_x']
-                msg = deviceState[topic] if occupancy else d['offmsg']
-                client.publish(topic=topic_pub, payload=msg, qos=1)
-                print(f'{occupancy=} {topic_pub=} {msg=}', file=sys.stderr)
-    if currentSec > sensorSec + kSleepSec:
+            action = payload.get(cancel['key'], '')
+            if action == 'single':
+                cencelPeriodSec = currentSec + kCancelSec
+            elif action == 'double':
+                cancelPeriodSec = currentSec + kCancelSec * 2
+            elif action == 'triple':
+                cancelPeriodSec = currentSec + kCancelSec * 3
+    if currentSec > refractoryPeriodSec:
         for d in kTopicsDictList:
             if d['topic_sub'] == msg.topic:
                 deviceState[msg.topic] = msg.payload.decode(encoding='utf-8')
-    
+                # print(f'msg received= {deviceState[msg.topic]}')
 
 def zigbee_msensor(host, port, username, password):
     try:
-        mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5)
         mqttc.on_connect = on_connect
         mqttc.on_message = on_message
         mqttc.username_pw_set(username=username, password=password)
