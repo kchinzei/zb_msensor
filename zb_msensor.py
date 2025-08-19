@@ -27,7 +27,7 @@ import paho.mqtt.client as mqtt
 defaultHost = '192.168.0.201'
 defaultPort = 1883
 deviceState = {}
-refractoryPeriodSec = 0 # When a motion sensor raises a message, uppdate it.
+sleepPeriodSec = 0 # When a motion sensor raises a message, uppdate it.
 cancelPeriodSec = 0
 
 kSleepSec = 10
@@ -73,7 +73,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    global deviceState, refractoryPeriodSec, cancelPeriodSec
+    global deviceState, sleepPeriodSec, cancelPeriodSec
     currentSec = time.time()
     # which topic we receive?
     if currentSec > cancelPeriodSec:
@@ -83,7 +83,7 @@ def on_message(client, userdata, msg):
                 # Sensor issued a message.
                 payload = json.loads(msg.payload.decode(encoding='utf-8'))
                 occupancy = payload['occupancy']
-                refractoryPeriodSec = currentSec + kSleepSec
+                sleepPeriodSec = currentSec + kSleepSec
                 for d in kTopicsDictList:
                     topic = d['topic_sub']
                     topic_pub = topic + d['topic_pub_x']
@@ -117,12 +117,13 @@ def on_message(client, userdata, msg):
             payload = json.loads(msg.payload.decode(encoding='utf-8'))
             action = payload.get(cancel['key'], '')
             if action == 'single':
-                cencelPeriodSec = currentSec + kCancelSec
-            elif action == 'double':
+                cancelPeriodSec = currentSec + kCancelSec
+            if action == 'double':
                 cancelPeriodSec = currentSec + kCancelSec * 2
             elif action == 'triple':
                 cancelPeriodSec = currentSec + kCancelSec * 3
-    if currentSec > refractoryPeriodSec:
+            print(f'cancel switch {msg.topic} | action={action}', file=sys.stderr)
+    if currentSec > sleepPeriodSec:
         for d in kTopicsDictList:
             if d['topic_sub'] == msg.topic:
                 deviceState[msg.topic] = msg.payload.decode(encoding='utf-8')
