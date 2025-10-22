@@ -32,6 +32,7 @@ cancelPeriodSec = 0
 
 kSleepSec = 10
 kCancelSec = 15*60
+kCancelSec_inf = float('inf')
 
 kTopicsDictList = [
 #    {'topic_sub': 'zigbee2mqtt/RGBWW', 'type': 'rgbww', 'topic_pub_x': '/set', 'offmsg': '{"state":"OFF"}',
@@ -122,7 +123,12 @@ def on_message(client, userdata, msg):
                 cancelPeriodSec = currentSec + kCancelSec * 2
             elif action == 'triple':
                 cancelPeriodSec = currentSec + kCancelSec * 3
-            print(f'cancel switch {msg.topic} | action={action}', file=sys.stderr)
+            elif action == 'hold':
+                if cancelPeriodSec != kCancelSec_inf:
+                    cancelPeriodSec = kCancelSec_inf
+                else:
+                    cancelPeriodSec = currentSec
+            print(f'cancel switch {msg.topic} | action={action}', file=sys.stderr)√
     if currentSec > sleepPeriodSec:
         for d in kTopicsDictList:
             if d['topic_sub'] == msg.topic:

@@ -25,6 +25,21 @@ When the PIR sensor detects human leaves, it turns off the bulbs.
 When it detects enters, it resumes the previous state of the bulbs.
 Since `zb_msensor` monitors the commands to these bulbs, it can flexibly update its state.
 
+### 'Do not disturb' switch
+
+Turn off period is hardcoded by the sensor, which is 1 minute.
+When it does not detect a moving body in this period,
+it turns off regardless someone is there or not.
+
+To disable this behavior, another Zigbee switch can send 'do not disturb'
+signals.
+
+- Single press: 15 min
+- Double press: 30 min
+- Long press: toggle forever / cancel forever
+
+I use [Aqara WXKG11LM](https://www.zigbee2mqtt.io/devices/WXKG11LM.html#aqara-wxkg11lm) as the switch.
+
 ## Dependency
 
 - Python 3.9 or later
