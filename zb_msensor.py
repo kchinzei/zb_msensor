@@ -128,7 +128,9 @@ def on_message(client, userdata, msg):
                     cancelPeriodSec = kCancelSec_inf
                 else:
                     cancelPeriodSec = currentSec
-            print(f'cancel switch {msg.topic} | action={action}', file=sys.stderr)√
+                    action = 'de-hold'
+            if action != 'release':
+                print(f'cancel switch {msg.topic} | action={action}', file=sys.stderr)
     if currentSec > sleepPeriodSec:
         for d in kTopicsDictList:
             if d['topic_sub'] == msg.topic:
