@@ -32,6 +32,7 @@ cancelPeriodSec = 0
 
 kSleepSec = 10
 kCancelSec = 15*60
+kCancelSec_hour = 3600
 kCancelSec_inf = float('inf')
 
 kTopicsDictList = [
@@ -124,6 +125,9 @@ def on_message(client, userdata, msg):
             elif action == 'triple':
                 cancelPeriodSec = currentSec + kCancelSec * 3
             elif action == 'hold':
+                cancelPeriodSec = currentSec + kCancelSec_hour
+            elif action == 'quad':
+                # This won't be sent - to preserve the 'infinite keep' code instead of deleting
                 if cancelPeriodSec != kCancelSec_inf:
                     cancelPeriodSec = kCancelSec_inf
                 else:

@@ -36,7 +36,7 @@ signals.
 
 - Single press: 15 min
 - Double press: 30 min
-- Long press: toggle forever / cancel forever
+- Long press: one hour
 
 I use [Aqara WXKG11LM](https://www.zigbee2mqtt.io/devices/WXKG11LM.html#aqara-wxkg11lm) as the switch.
 
